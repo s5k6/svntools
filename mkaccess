@@ -1,8 +1,24 @@
 #!/usr/bin/python
 
+# author: Stefan Klinger
+#         Database & Information Systems (DBIS) Group
+#         Uni Konstanz
+# license: GNU Affero General Public License
+#          file LICENSE, or <http://www.gnu.org/licenses/agpl-3.0.html>
+# last change: $Date$
+
+
 import os
 import stat
+import time
 import ConfigParser
+import getpass
+
+
+# These may be modified during svn checkout
+svnRoot = 'https://svn.uni-konstanz.de/dbis/mkaccess/'
+svnRevision = '$Revision$'[11:-1].strip()
+
 
 
 def err(msg):
@@ -12,70 +28,136 @@ def err(msg):
 def warn(msg):
     print 'WARNING: %s' % msg
 
+def skip(fn, msg):
+    print 'SKIPPING %s: %s' % (fn, msg)
+
+    
+
+print """
+This is mkaccess, rev%s, <%s>
+Stefan Klinger <stefan.klinger@uni-konstanz.de>
+Database and Information Systems Group <http://dbis.uni-konstanz.de/>
+""" % (svnRevision, svnRoot)
+
+
+if not os.path.exists('access.d/'):
+    err('Missing directory: access.d')
+    
+m = stat.S_IMODE(os.stat('access.d')[stat.ST_MODE])
+if (m & 0770) != 0770: err('Invalid mode %o: chmod 770 access.d' % m)
+
+
+if not os.path.exists('access.bak/'):
+    err('Missing directory: access.bak')
+
+m = stat.S_IMODE(os.stat('access.bak')[stat.ST_MODE])
+if (m & 0770) != 0770: err('Invalid mode %o: chmod 770 access.bak' % m)
+
+
+
+overrideSection = 'mkaccess override'
+
+
+def getBooleanDefault(cp, sect, opt, default):
+    if cp.has_option(sect,opt): return cp.getboolean(sect, opt)
+    return default
+
 
 groups = {}
 perms = []
-
-
-
-s = os.stat('access.d')
-m = stat.S_IMODE(s[stat.ST_MODE])
-if m & 0770 != 0770: err('Invalid mode %o: chmod 770 access.d' % m)
-
-
-mySection = 'mkaccess override'
-
+skipped = []
+override = []
+total = 0
+used = 0
 
 for repo in os.listdir('access.d'):
-    conf = os.path.join('access.d', repo)
-
-    s = os.stat(conf)
-    m = stat.S_IMODE(s[stat.ST_MODE])
-    if m & 0660 != 0660: err('Invalid mode %o: chmod 660 %s' % (m, conf))
-
-    cp = ConfigParser.ConfigParser()
-    cp.optionxform = str
-    cp.read(conf)
-
+    total += 1
+    ok = True # unset if we need to skip this conf
     warnPrefix = True
     warnExternalGroup = True
-    if cp.has_section(mySection):
-        if cp.has_option(mySection,'warnPrefix'):
-            warnPrefix = cp.getboolean(mySection,'warnPrefix')
-        if cp.has_option(mySection,'warnExternalGroup'):
-            warnExternalGroup = cp.getboolean(mySection,'warnExternalGroup')
+    skipMissingRepo = True
 
-    gs = {}
+    conf = os.path.join('access.d', repo)
+
+    # check whether mode is ok
+    m = stat.S_IMODE(os.stat(conf)[stat.ST_MODE])
+    if (m & 0640) != 0640:
+        skip(repo, 'Invalid mode %o: chmod 640 %s' % (m,conf))
+        skipped.append(repo)
+        continue
+
+    # try to parse file
+    cp = ConfigParser.ConfigParser()
+    cp.optionxform = str
+    try:
+        cp.read(conf)
+    except ConfigParser.ParsingError as e:
+        skip(conf, str(e))
+        skipped.append(repo)
+        continue
+        
+        
+    # override any checks?
+    if cp.has_section(overrideSection):
+        override.append(repo)
+        warnPrefix = getBooleanDefault(
+            cp, overrideSection, 'warnPrefix', warnPrefix)
+        warnExternalGroup = getBooleanDefault(
+            cp, overrideSection, 'warnExternalGroup', warnExternalGroup)
+        skipMissingRepo = getBooleanDefault(
+            cp, overrideSection, 'skipMissingRepo', skipMissingRepo)
+
+    # is there any such repository at all?
+    if skipMissingRepo and not(os.path.exists(os.path.join('repos',repo))):
+        skip(repo, 'There is no repository named `%s`' % repo)
+        skipped.append(repo)
+        continue
+
+    # check for the group-writable bug of the repos
+    q = os.path.join('repos',repo,'db','rep-cache.db')
+    if os.path.exists(q):
+        m = stat.S_IMODE(os.stat(q)[stat.ST_MODE])
+        if (m & 0660) != 0660:
+            warn('Consider: chmod g+w %s' % q)
+
+    # get the groups defined in this file
+    thisGroups = {}
     if cp.has_section('groups'):
-        gs = dict(cp.items('groups'))
-        for (g, ms) in gs.iteritems():
+        thisGroups = dict(cp.items('groups'))
+        for (g, ms) in thisGroups.iteritems():
+
+            # do not use reference syntax when defining a group
+            if g[0] == '@':
+                skip(repo, 'Group definition `%s` starts with `@`' % g)
+                ok = False
 
             # check for sane prefix
             if warnPrefix and not(g.startswith(repo)):
                 warn('Groupname `%s` does not start with repository '
                      'prefix `%s` in %s' % (g,repo,conf))
 
-            # fail if group is redefined
+            # fail if group is a redefinition.  Cannot find out who
+            # defined his group first, so we need to bail out here, no
+            # skipping.
             if groups.get(g) != None:
-                err('Redefinition of group `%s` in %s' % (g,conf))
-
+                err('Redefinition of group `%s` found in %s' % (g, repo))
+                
             # warn if non-locally defined group is referenced
             for m in ms.split(','):
                 m = m.strip()
                 if m[0] == '@':
                     m = m[1:]
-                    if m == g: err('Cyclic definition of group `%s`'
-                                   ' in %s' % (m, conf))
-                    if warnExternalGroup and gs.get(m) == None:
+                    if m == g:
+                        skip(repo, 'Cyclic definition of group `%s`' % m)
+                        ok = False
+                    if warnExternalGroup and thisGroups.get(m) == None:
                         warn('Reference to non-local group `%s` in '
                              'definition of group `%s` in %s' % (m,g,conf))
-        # add group definitions
-        groups.update(gs)
 
-
+    thisPerms = []
     for sect in cp.sections():
         
-        if ['groups', mySection].__contains__(sect):
+        if ['groups', overrideSection].__contains__(sect):
             # these have been handled above
             pass
         
@@ -83,23 +165,34 @@ for repo in os.listdir('access.d'):
             # all other sections must define paths in a repos
             rp = sect.split(':',1)
             if len(rp) < 2:
-                err('Invalid section [%s] (no colon) in %s' % (sect,conf))
+                skip(repo, 'Invalid section header [%s] lacks colon' % sect)
+                ok = False
             if rp[0] != repo:
-                err('Section [%s] refers to repository `%s` instead '
-                    'of `%s` in %s' % (sect,rp[0],repo,conf))
+                skip(repo, 'Section header [%s] refers to repository `%s` '
+                     'instead of `%s`' % (sect,rp[0],repo))
+                ok = False
             ps = cp.items(sect)
             if warnExternalGroup:
                 for (u, rs) in ps:
                     if u[0] == '@':
                         u = u[1:]
-                        if gs.get(u) == None:
+                        if thisGroups.get(u) == None:
                             warn('Reference to non-local group `%s` in '
                                  'permissions for `%s` in %s'
                                  % (u, sect, conf))
             # add permission section
-            perms.append((sect,ps))
+            thisPerms.append((sect,ps))
 
+    if ok: # no reason to skip, so add to result
+        groups.update(thisGroups)
+        perms.extend(thisPerms)
+        used += 1
+        print 'adding %s' % repo
+        
+    else: # skip this config file
+        skipped.append(repo)
 
+  
 
 # Verify that all groups referenced in group definitions are defined,
 # and that no cycles occur.
@@ -125,28 +218,29 @@ for (sect, ps) in perms:
                 err('Reference to unknown group `%s` in permissions '
                     'for `%s`' % (u, sect))
 
-
-# make a backup
-
-
                 
 
-# compile output                
-            
-access = open('access', 'w')
+# compile output
+# ASCII-arts from http://www.network-science.de/ascii/
+
+timestamp = time.strftime('%Y%m%d%Z%H%M%S')
+
+access = open('access.new', 'w')
 access.write("""# DO NOT EDIT THIS FILE
 #        ____                       __              ___ __  
-#       / __ \____     ____  ____  / /_   ___  ____/ (_) /_ 
-#      / / / / __ \   / __ \/ __ \/ __/  / _ \/ __  / / __/ 
+#       / __ \\____     ____  ____  / /_   ___  ____/ (_) /_ 
+#      / / / / __ \\   / __ \\/ __ \\/ __/  / _ \\/ __  / / __/ 
 #     / /_/ / /_/ /  / / / / /_/ / /_   /  __/ /_/ / / /_    _   _   _
-#    /_____/\____/  /_/ /_/\____/\__/   \___/\__,_/_/\__/   (_) (_) (_)
+#    /_____/\\____/  /_/ /_/\\____/\\__/   \\___/\\__,_/_/\\__/   (_) (_) (_)
 #                                                                              
-# Do not edit this file.  It is compiled from other files and will be
-# overwritten next time!  See the README for more information.
+# ...this file.  It is compiled from other files and will be overwritten
+# next time!  See <%s>
+#
+# compiled %s by %s
 # ----------------------------------------------------------------------
 
 [groups]
-""")
+""" % (svnRoot, timestamp, getpass.getuser()))
 
 for (g, v) in groups.iteritems():
     access.write('%s = %s\n' % (g,v))
@@ -158,5 +252,28 @@ for (sect, ps) in perms:
 
 access.write("""
 # ----------------------------------------------------------------------
-# BEWARE: This file will be overwritten by a ganerating script!
+# BEWARE: This file will be overwritten by an evil script!
 """)
+
+# set mode and group as in access.d
+os.chmod('access.new', 0660)
+os.chown('access.new', -1, os.stat('access.d')[stat.ST_GID])
+
+
+# make a backup and install new file
+os.rename('access', 'access.bak/%s' % timestamp)
+os.rename('access.new', 'access')
+
+
+if len(override) > 0:
+    print '\nThe following files override consistency checks:'
+    for f in override: print '%s' % f,
+    print
+    
+if len(skipped) > 0:
+    print '\nThe following files have been IGNORED:'
+    for f in skipped: print '%s' % f,
+    print
+    
+print '\nAdded data from %i of %i files to result set.' % (used, total)
+
