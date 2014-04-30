@@ -60,7 +60,7 @@ The following consistency checks are provided:
     overridden.
 
   * Suggest to make `repos/<repo>/db/rep-cache.db` writable for the
-    group.
+    group. [This has been disabled: Not necessary any more.]
 
   * Some minor syntax checks.
 
