@@ -113,12 +113,14 @@ for repo in os.listdir('access.d'):
         skipped.append(repo)
         continue
 
-    # check for the group-writable bug of the repos
-    q = os.path.join('repos',repo,'db','rep-cache.db')
-    if os.path.exists(q):
-        m = stat.S_IMODE(os.stat(q)[stat.ST_MODE])
-        if (m & 0660) != 0660:
-            warn('Consider: chmod g+w %s' % q)
+    # This seems not necessary, according to a mail by Jacob Becker,
+    # dated 30 Apr 2014 11:13:41
+    ## check for the group-writable bug of the repos
+    #q = os.path.join('repos',repo,'db','rep-cache.db')
+    #if os.path.exists(q):
+    #    m = stat.S_IMODE(os.stat(q)[stat.ST_MODE])
+    #    if (m & 0660) != 0660:
+    #        warn('Consider: chmod g+w %s' % q)
 
     # get the groups defined in this file
     thisGroups = {}
