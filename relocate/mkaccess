@@ -248,7 +248,7 @@ for (g, v) in groups.iteritems():
     access.write('%s = %s\n' % (g,v))
 
 for (sect, ps) in perms:
-    access.write('[%s]\n' % sect)
+    access.write('\n[%s]\n' % sect)
     for (g,rs) in ps:
         access.write('%s = %s\n' % (g,rs))
 

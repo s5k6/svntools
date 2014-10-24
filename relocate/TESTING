@@ -1,0 +1,11 @@
+To test this script on your local machine:
+
+    $ rsync -r svn:/mnt/data/home/pop09951/dbis/access.d .
+    $ mkdir access.bak
+    $ chmod 770 access.d access.bak
+    $ for i in $(cd access.d; ls); do mkdir -p "repos/$i"; chmod 640 "access.d/$i"; done
+    $ echo '# initial version' > access
+
+Then do the testing:
+
+    $ python2 mkaccess 
