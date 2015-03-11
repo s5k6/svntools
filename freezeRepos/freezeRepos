@@ -25,16 +25,25 @@ function ask_yN {
 }
 
 
+
+# This is the home of the repository
 home='/home/svn/dbis';
 
+# The name of the repos
 name="${1:?need repository name}";
+
+# Assert this repos exists.
 test -d "${home}/repos/${name}" || err "No such repos";
+
+# Assert the backup directory is there
 test -d "${home}/old-repos" || err "No directory for old repositories";
 
+# Check for existing backups with same name
 find "${home}/old-repos" | grep -q "${name}" &&
     err 'collision with existing backup?';
 
 
+# Ask the user: Sure?
 
 cat <<EOF
 ======================================================================
@@ -42,6 +51,9 @@ EOF
 ask_yN "Freeze (lock, backup & DELETE) repository ${1}?" || exit 0;
 
 
+
+# Make backup of permissions file, and set new permissions so that
+# exactly the caller of this script has exactly read permissions.
 
 cat <<EOF
 ----------------------------------------------------------------------
@@ -64,6 +76,8 @@ EOF
 
 
 
+# Do a export of latest revision, and compress into `${name}.tar.bz2`
+
 cat <<EOF
 ----------------------------------------------------------------------
 creating snapshot of last revision
@@ -79,6 +93,8 @@ chmod 440 "${name}.tar.bz2";
 
 
 
+# Do a dump of entire repos, and compress into `${name}.dump.bz2`
+
 cat <<EOF
 ----------------------------------------------------------------------
 dumping entire repository
@@ -88,6 +104,10 @@ svnadmin dump "${home}/repos/${name}" | bzip2 > "${name}.dump.bz2";
 chmod 440 "${name}.dump.bz2";
 
 
+
+# Do a plain file system level copy of the repos, and compress into
+# `${name}.repos.tar.bz2`.  The trick with the symlink is required to
+# create a tar archive whose only member is named like the archive.
 
 cat <<EOF
 ----------------------------------------------------------------------
@@ -101,6 +121,10 @@ chmod 440 "${name}.repos.tar.bz2";
 
 
 
+# “Remove” repos.  Lacking sufficient permissions, we simply move it
+# to the `DELETE_ME` subdir.  Occasionally, some Admin has todelete
+# that.
+
 cat <<EOF
 ----------------------------------------------------------------------
 removing repos
@@ -113,6 +137,8 @@ mkdir -p repos/DELETE_ME/;
 mv "repos/${name}" "repos/DELETE_ME/${name}_$(date +'%Y%m%dT%H%M%S%z')";
 
 
+
+# Done, show generated backup files.
 
 cat <<EOF
 ----------------------------------------------------------------------
