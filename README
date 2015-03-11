@@ -1,4 +1,4 @@
 This repository now contains more than just the original `mkaccess`
 script.  See the respective subdir.
 
-`relocate` — is to be renamed `mkaccess`.
+`mkaccess` — the original `mkaccess` script.
