@@ -1,0 +1,75 @@
+# Addons for your `~/.bashrc`
+# 
+# Author: Stefan Klinger
+#         Database & Information Systems (DBIS) Group
+#         Uni Konstanz
+# License: GNU Affero General Public License
+#          file LICENSE, or <http://www.gnu.org/licenses/agpl-3.0.html>
+
+
+# Mark the files given as arguments as being UTF-8 encoded plain text.
+# Useful if SVN mistakenly added a file as binary, or assuming the
+# wrong character encodeing.  Setting the EOL-convention isgenerallt
+# useful for such files.
+
+function svn-plaintext {
+    svn ps svn:mime-type 'text/plain;charset=UTF-8' "$@";
+    svn ps svn:eol-style native "$@";
+}
+
+# Similarly, mark files as protected, or as executable:
+
+function svn-protect {
+    svn ps svn:needs-lock on "$@";
+}
+
+function svn-executable {
+    svn ps svn:executable on "$@";
+}
+
+
+
+# Tell SVN to ignore a whole bunch of files, maybe even spread across
+# different directories.  If you quote globbing, the glob will be
+# expanded by SVN when checking whether a file should be ignored.
+
+function ask_yN {
+    local answer='';
+    read -n 1 -s -p "$* [yN]" answer;
+    if test "${answer}" = y; then
+        echo yes;
+        return 0;
+    fi;
+    echo no;
+    return 1;
+}
+
+function svn-ignore {
+    tmp="$(mktemp -d 'svn-ignore.XXXXXX')";
+
+    IFS=$'\n'
+    for i in "$@"; do dirname "$i"; done | sort -u > "${tmp}/dirs";
+    for d in $(< "${tmp}/dirs"); do
+        cat <<EOF
+============================================================
+Processing directory: $d
+---old------------------------------------------------------
+EOF
+        svn pg svn:ignore "$d" | sort -u | sed -r '/^\s*$/d' | tee "${tmp}/old";
+        cat <<EOF
+---new------------------------------------------------------
+EOF
+        for i in "$@"; do
+            test "$(dirname "$i")" = "$d" && basename "$i";
+        done | sort -u | comm -13 "${tmp}/old" - | tee "${tmp}/new";
+        if test -s "${tmp}/new"; then
+            ask_yN 'add these?' &&
+                cat "${tmp}/old" "${tmp}/new" | sed -r '/^\s*$/d' |
+                    svn ps svn:ignore -F - "$d";
+        else
+            echo 'Nothing to add!';
+        fi;
+    done;
+   
+    rm -r "$tmp";
+}

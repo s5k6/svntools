@@ -14,6 +14,8 @@ ${name}:
     `${name}.tar.bz2` — exported latest revision for easy access to final
     state of the project.
 
+    `${name}.access` — copy of latest permissions in use.
+
 
 It should be possible to create these files with something like the
 following (warning: untested):
