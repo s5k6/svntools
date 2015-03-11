@@ -1,0 +1,41 @@
+Title: Suggestion for backup policy
+Author: Stefan Klinger <stefan.klinger@uni-konstanz.de>
+Date: Sun 2014-Oct-19 13:17:10 CEST
+
+
+I suggest the following naming convention for backups of a repository
+${name}:
+
+    `${name}.dump.bz2` — the compressed dump from `svnadmin dump`, to
+    provide a long term backup of the entire repository.
+
+    `${name}.repos.tar.bz2` — the packed snapshot for easy resurrection.
+
+    `${name}.tar.bz2` — exported latest revision for easy access to final
+    state of the project.
+
+
+It should be possible to create these files with something like the
+following (warning: untested):
+
+    # to avoid race conditions, make sure nobody has commit
+    # permissions on the repository.
+
+    # to backup `https://svn.uni-konstanz.de/dbis/foobar`:
+    $ name=foobar
+
+    $ svnadmin dump "/home/svn/dbis/repos/${name}" | bzip2 > "${name}.dump.bz2"
+    $ chmod 440 "${name}.dump.bz2"
+
+    $ ln -s "/home/svn/dbis/repos/${name}" "${name}.repos"
+    $ tar -hc "${name}.repos" | bzip2 > "${name}.repos.tar.bz2"
+    $ rm "${name}.repos"
+    $ chmod 440 "${name}.repos.tar.bz2"
+
+    $ svn export "https://svn.uni-konstanz.de/dbis/${name}"
+    $ tar -c "${name}" | bzip2 > "${name}.tar.bz2"
+    $ rm -rf "${name}"
+    $ chmod 440 "${name}.tar.bz2"
+
+Alternatively, you may use the `freezeRepos` script.  Read before
+using...

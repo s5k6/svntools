@@ -1,0 +1,121 @@
+#!/bin/bash
+
+# author: Stefan Klinger
+#         Database & Information Systems (DBIS) Group
+#         Uni Konstanz
+# license: GNU Affero General Public License
+#          file LICENSE, or <http://www.gnu.org/licenses/agpl-3.0.html>
+# last change: $Date$
+
+set -u -e -C;
+shopt -s nullglob;
+
+function err { echo "$@" >&2; exit 1; }
+function warn { echo "$@" >&2; }
+
+function ask_yN {
+    local answer='';
+    read -n 1 -s -p "$* [yN]" answer;
+    if test "${answer}" = y; then
+        echo yes;
+        return 0;
+    fi;
+    echo no;
+    return 1;
+}
+
+
+home='/home/svn/dbis';
+
+name="${1:?need repository name}";
+test -d "${home}/repos/${name}" || err "No such repos";
+test -d "${home}/old-repos" || err "No directory for old repositories";
+
+find "${home}/old-repos" | grep -q "${name}" &&
+    err 'collision with existing backup?';
+
+
+
+cat <<EOF
+======================================================================
+EOF
+ask_yN "Freeze (lock, backup & DELETE) repository ${1}?" || exit 0;
+
+
+
+cat <<EOF
+----------------------------------------------------------------------
+setting permissions for exactly this user to make backup
+EOF
+
+cd ${home};
+
+if test -r "access.d/${name}"; then
+    cat "access.d/${name}" > "${home}/old-repos/${name}.access";
+else
+    warn "No old access file.  Not backed up.";
+fi;
+
+tee "access.d/${name}" <<EOF;
+[${name}:/]
+${USER} = r
+EOF
+./mkaccess;
+
+
+
+cat <<EOF
+----------------------------------------------------------------------
+creating snapshot of last revision
+EOF
+
+cd "${home}/old-repos";
+svn export "https://svn.uni-konstanz.de/dbis/${name}";
+
+echo 'compressing'
+tar -c "${name}" | bzip2 > "${name}.tar.bz2";
+rm -rf "${name}";
+chmod 440 "${name}.tar.bz2";
+
+
+
+cat <<EOF
+----------------------------------------------------------------------
+dumping entire repository
+EOF
+
+svnadmin dump "${home}/repos/${name}" | bzip2 > "${name}.dump.bz2";
+chmod 440 "${name}.dump.bz2";
+
+
+
+cat <<EOF
+----------------------------------------------------------------------
+tarring entire repository
+EOF
+
+ln -s "${home}/repos/${name}" "${name}.repos";
+tar -hc "${name}.repos" | bzip2 > "${name}.repos.tar.bz2";
+rm "${name}.repos";
+chmod 440 "${name}.repos.tar.bz2";
+
+
+
+cat <<EOF
+----------------------------------------------------------------------
+removing repos
+EOF
+
+cd "${home}";
+rm "access.d/${name}";
+./mkaccess;
+mkdir -p repos/DELETE_ME/;
+mv "repos/${name}" "repos/DELETE_ME/${name}_$(date +'%Y%m%dT%H%M%S%z')";
+
+
+
+cat <<EOF
+----------------------------------------------------------------------
+done
+EOF
+ls -l ${home}/old-repos/${name}.*
