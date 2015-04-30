@@ -67,6 +67,7 @@ cd ${home};
 
 if test -r "access.d/${name}"; then
     cat "access.d/${name}" > "${home}/old-repos/${name}.access";
+    chmod 440 "${home}/old-repos/${name}.access";
 else
     warn "No old access file.  Not backed up.";
 fi;
