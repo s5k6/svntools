@@ -19,7 +19,7 @@ import getpass
 
 
 # These may be modified during svn checkout
-svnRoot = 'https://svn.uni-konstanz.de/dbis/mkaccess/'
+svnRoot = 'https://svn.uni-konstanz.de/dbis/svntools/mkaccess'
 svnRevision = '$Revision$'[11:-1].strip()
 
 

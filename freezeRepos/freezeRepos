@@ -42,7 +42,7 @@ test -d "${home}/repos/${name}" || err "No such repos";
 test -d "${home}/old-repos" || err "No directory for old repositories";
 
 # Check for existing backups with same name
-find "${home}/old-repos" | grep -q "${name}" &&
+find "${home}/old-repos" -path "${home}/old-repos/${name}*" &&
     err 'collision with existing backup?';
 
 
