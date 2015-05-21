@@ -11,7 +11,7 @@
 # $Date$
 
 set -u -e -C;
-shopt -s nullglob;
+shopt -s failglob;
 
 function err { echo "$@" >&2; exit 1; }
 function warn { echo "$@" >&2; }
