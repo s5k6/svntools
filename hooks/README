@@ -1,0 +1,29 @@
+Stefan Klinger <mail@stefan-klinger.de>.
+Database & Information Systems (DBIS) Group, Uni Konstanz.
+Published under the GNU Affero General Public License
+
+
+The `pre-commit` bash-script can be installed on the SVN server to
+limit the files that can be added to the repository based on
+
+    * size
+
+    * file name suffix
+
+    * characters used in filenames
+
+Further configuration can be put in `pre-commit.config` which is
+sourced from the hook script.  Individual users and paths in the repo
+can be “privileged”, i.e., exempt from some of the limitations imposed
+by the script.
+
+I've used this script for a rather strict regime in the inf2_16s
+lecture: Only plain text files (program source code, theoretical
+solutions in plain text or latex source code) limited to 64kiB are
+allowed.  Many file types (*.aux, *.log, ...) are forbidden.  File
+names must contain neither umlauts nor spaces.
+
+There have been no complaints by the students.  I did not see any
+problems one might expect with using different platforms (and
+differing encoding of umlauts, as combining or single characters), and
+the tutors have been happy.
